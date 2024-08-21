@@ -1,11 +1,11 @@
-  
 pub struct Config<'a> {
     addr: &'a str,
     port: u16,
     currencies: &'a [String],
 }
-    
+
 impl<'a> Config<'a> {
+    /// It's better to use crates like `anyhow` or `thiserror` to have generic or typed approach to errors.
     pub fn build(args: &'a [String]) -> Result<Config<'a>, String> {
         if args.len() < 3 {
             return Err(String::from("not enough arguments"));
@@ -19,9 +19,9 @@ impl<'a> Config<'a> {
             None => return Err(String::from("ip-address and port not found")),
         };
 
-        let port: u16 = port_str.parse().map_err(|err|{
-            format!("wrong port format: {}", err)
-        })?;
+        let port: u16 = port_str
+            .parse()
+            .map_err(|err| format!("wrong port format: {}", err))?;
 
         let currencies: &[String] = &args[2..];
 
@@ -32,16 +32,17 @@ impl<'a> Config<'a> {
         })
     }
 
+    /// It'd be easier to just have pub fields due to this is a data object.
     pub fn get_addr(&self) -> &str {
-        &self.addr
+        self.addr
     }
 
     pub fn get_port(&self) -> u16 {
         self.port
     }
 
+    /// Why to allocate here?
     pub fn get_currencies_collection(&self) -> Vec<String> {
         self.currencies.to_vec()
     }
 }
-    
