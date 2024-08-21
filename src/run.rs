@@ -1,11 +1,11 @@
 use std::error::Error;
-use std::thread;
 use std::sync::mpsc::{self, TryRecvError};
+use std::thread;
 use websocket::OwnedMessage;
 
 use crate::config::Config;
-use crate::messages::RequestMessage;
 use crate::connector::ConnectionManager;
+use crate::messages::RequestMessage;
 
 enum Command {
     SendMessage(String),
@@ -34,14 +34,14 @@ pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
                         println!("Error sending message: {}", e);
                         continue;
                     }
-                },
-                
+                }
+
                 Ok(Command::Terminate) => {
                     println!("Terminating websocket thread");
                     break;
                 }
 
-                Err(TryRecvError::Empty) => {},
+                Err(TryRecvError::Empty) => {}
 
                 Err(TryRecvError::Disconnected) => {
                     println!("to_ws_rx channel has been disconnected");
@@ -89,26 +89,26 @@ fn process_message(msg: OwnedMessage) {
             println!("Received text message: {}", msg);
             // обработать сообщение
             // ...
-        },
+        }
 
         OwnedMessage::Binary(data) => {
             println!("Received binary data: {:?}", data);
-        },
+        }
 
         OwnedMessage::Ping(ping) => {
             println!("Received ping: {:?}", ping);
             // отправить Pong в ответ
             // ...
-        },
+        }
 
         OwnedMessage::Pong(pong) => {
             println!("Received pong: {:?}", pong);
-        },
+        }
 
         OwnedMessage::Close(data) => {
             println!("Received close message: {:?}", data);
             // закрыть соединение
             // ...
-        },
+        }
     }
 }

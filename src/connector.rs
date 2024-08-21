@@ -1,7 +1,7 @@
-use websocket::{ClientBuilder, Message, OwnedMessage, sync::Client};
-use std::net::TcpStream;
 use std::error::Error;
+use std::net::TcpStream;
 use websocket::stream::sync::TlsStream;
+use websocket::{sync::Client, ClientBuilder, Message, OwnedMessage};
 
 pub struct ConnectionManager {
     url: String,
@@ -16,8 +16,7 @@ impl ConnectionManager {
 
     // Метод для подключения к WebSocket
     pub fn connect(&mut self) -> Result<(), Box<dyn Error>> {
-        let client = ClientBuilder::new(&self.url)?
-            .connect_secure(None)?;
+        let client = ClientBuilder::new(&self.url)?.connect_secure(None)?;
 
         self.client = Some(client); // Client<> не реализует типаж Copy поэтому здесь move
         Ok(())
@@ -31,15 +30,15 @@ impl ConnectionManager {
                 Err(e) => Err(e.into()),
             }
         } else {
-            return Err("Client is not connected".into());
-        }        
+            Err("Client is not connected".into())
+        }
     }
 
     pub fn receive_message(&mut self) -> Result<OwnedMessage, Box<dyn Error>> {
         if self.client.is_none() {
-            return Err("Client is not connected".into()); 
+            return Err("Client is not connected".into());
         }
-        
+
         let client = self.client.as_mut().unwrap();
         match client.recv_message() {
             Ok(message) => Ok(message),

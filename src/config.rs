@@ -1,10 +1,9 @@
-  
 pub struct Config<'a> {
     addr: &'a str,
     port: u16,
     currencies: &'a [String],
 }
-    
+
 impl<'a> Config<'a> {
     pub fn build(args: &'a [String]) -> Result<Config<'a>, String> {
         if args.len() < 3 {
@@ -19,9 +18,9 @@ impl<'a> Config<'a> {
             None => return Err(String::from("ip-address and port not found")),
         };
 
-        let port: u16 = port_str.parse().map_err(|err|{
-            format!("wrong port format: {}", err)
-        })?;
+        let port: u16 = port_str
+            .parse()
+            .map_err(|err| format!("wrong port format: {}", err))?;
 
         let currencies: &[String] = &args[2..];
 
@@ -33,7 +32,7 @@ impl<'a> Config<'a> {
     }
 
     pub fn get_addr(&self) -> &str {
-        &self.addr
+        self.addr
     }
 
     pub fn get_port(&self) -> u16 {
@@ -44,4 +43,3 @@ impl<'a> Config<'a> {
         self.currencies.to_vec()
     }
 }
-    
