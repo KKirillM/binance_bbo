@@ -30,12 +30,3 @@ impl RequestMessage {
         RequestMessage::new("SUBSCRIBE".to_string(), params)
     }
 }
-
-impl ResponseMessage {
-    // pub fn new_empty(id: u64) -> Self {
-    //     ResponseMessage {
-    //         result: None,
-    //         id,
-    //     }
-    // }
-}

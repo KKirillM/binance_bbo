@@ -5,6 +5,21 @@ use websocket::{sync::Client, ClientBuilder, Message, OwnedMessage};
 
 pub struct ConnectionManager {
     url: String,
+    /// You'd better make a FSM to prevent continuous checks wheter the client is some. E.g.
+    ///
+    /// ```
+    /// struct ConnectionBuilder {
+    ///     url: String
+    /// }
+    ///
+    /// impl ConnectionBuilder {
+    ///     pub fn connect(self) -> Result<Connection, Box<dyn Error>> { ... }
+    /// }
+    ///
+    /// struct Connection {
+    ///     client: Client<TlsStream<TcpStream>>
+    /// }
+    /// ```
     client: Option<Client<TlsStream<TcpStream>>>, // Используем TlsStream для безопасного подключения
 }
 
@@ -24,25 +39,19 @@ impl ConnectionManager {
 
     pub fn send_message(&mut self, msg: &str) -> Result<(), Box<dyn Error>> {
         if let Some(client) = self.client.as_mut() {
-            let result = client.send_message(&Message::text(msg));
-            match result {
-                Ok(()) => Ok(()),
-                Err(e) => Err(e.into()),
-            }
+            Ok(client.send_message(&Message::text(msg))?)
         } else {
             Err("Client is not connected".into())
         }
     }
 
+    /// Leak of 3rd party `OwnedMessage` as the implementation detail. What if we'll replace ws client?
     pub fn receive_message(&mut self) -> Result<OwnedMessage, Box<dyn Error>> {
         if self.client.is_none() {
             return Err("Client is not connected".into());
         }
 
-        let client = self.client.as_mut().unwrap();
-        match client.recv_message() {
-            Ok(message) => Ok(message),
-            Err(e) => Err(e.into()),
-        }
+        let client = self.client.as_mut().unwrap(); // inconsistent with `send_message` check
+        Ok(client.recv_message()?)
     }
 }

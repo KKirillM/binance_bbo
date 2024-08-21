@@ -16,9 +16,7 @@ pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
     let mut client = ConnectionManager::new(config.get_addr(), config.get_port());
 
     println!("Connecting to {}:{}", config.get_addr(), config.get_port());
-    if let Err(e) = client.connect() {
-        return Err(format!("Failed to connect: {}", e).into());
-    }
+    client.connect()?;
     println!("Connected");
 
     let (to_ws_tx, to_ws_rx) = mpsc::channel();
@@ -36,6 +34,7 @@ pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
                     }
                 }
 
+                /// You can just drop to_ws_tx to get `TryRecvError::Disconnected` without additional cmd.
                 Ok(Command::Terminate) => {
                     println!("Terminating websocket thread");
                     break;
@@ -49,6 +48,7 @@ pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
                 }
             }
 
+            // What if the `receive_message` will block indefinitely? Don't see any timeout setting.
             match client.receive_message() {
                 Ok(msg) => from_ws_tx.send(msg).unwrap(),
                 Err(e) => {
@@ -58,6 +58,7 @@ pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
             }
         }
 
+        // Useless drop due to the `move`ing closure.
         drop(from_ws_tx);
     });
 
@@ -65,8 +66,10 @@ pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
     let mut params: Vec<String> = config.get_currencies_collection();
     params.iter_mut().for_each(|s| s.push_str("@bookTicker"));
 
+    // Untyped requests. You're using serde, just make the request serializable in proper format.
     let subscribe_message = RequestMessage::new_subscribe(params);
     let subscribe_message_str = serde_json::to_string(&subscribe_message)?;
+    // Moreover, due to it's a sole request, you can eliminate `to_ws` channel at all.
     to_ws_tx.send(Command::SendMessage(subscribe_message_str))?;
 
     // обрабатываем входящие сообщения
@@ -74,8 +77,8 @@ pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
         process_message(msg);
     }
 
-    println!("im here");
-    // Отправляем команду на завершение потока получения
+    println!("im here"); // hmm
+                         // Отправляем команду на завершение потока получения
     to_ws_tx.send(Command::Terminate)?;
     // Ожидаем завершения потока
     websocket_thread.join().unwrap();
@@ -107,8 +110,10 @@ fn process_message(msg: OwnedMessage) {
 
         OwnedMessage::Close(data) => {
             println!("Received close message: {:?}", data);
-            // закрыть соединение
+            // закрыть соединение. Yeah, it'd be nice.
             // ...
         }
     }
 }
+
+// As a conclusion, the network interaction is very bug prone due to unhandled IO errors, timeouts and so on.
