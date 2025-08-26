@@ -1,30 +1,32 @@
-use std::env;
-use std::process;
+use clap::Parser;
+use log::error;
 
 mod config;
 mod run;
 mod messages;
 mod connector;
 
-const USAGE: &'static str = "Usage:\n\tbinance_bbo websocket_ip_addr:port currency_pair [currency_pair_2 ... currency_pair_n]\n
-Example: binance_bbo wss://data-stream.binance.vision:9443 btcusdt ethusdt";
+#[derive(Parser)]
+#[command(author, version, about = "Binance BBO WebSocket client")]
+struct Cli {
+    /// WebSocket endpoint like wss://host:port
+    url: String,
+    /// Currency pairs to subscribe
+    #[arg(required = true)]
+    currencies: Vec<String>,
+}
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    //dbg!(&args);
+    env_logger::init();
+    let cli = Cli::parse();
 
-    let config = config::Config::build(&args).unwrap_or_else(|err|{
-        eprintln!("Error: {err}");
-        println!("{}", USAGE);
-        process::exit(1);
+    let config = config::Config::new(&cli.url, &cli.currencies).unwrap_or_else(|err| {
+        error!("{}", err);
+        std::process::exit(1);
     });
-    
-    //println!("IP-address: {}", config.ip_addr);
-    //println!("Port: {}", config.port);
-    //println!("Currencies: {:?}", config.currencies);
 
     if let Err(e) = run::run(&config) {
-        eprintln!("Application error: {e}");
-        process::exit(1);
+        error!("Application error: {}", e);
+        std::process::exit(1);
     }
 }

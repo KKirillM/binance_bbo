@@ -1,11 +1,14 @@
 use std::error::Error;
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
-use std::sync::mpsc::{self, TryRecvError};
-use websocket::OwnedMessage;
+use std::time::Duration;
+
+use log::{error, info};
+use tungstenite::Message;
 
 use crate::config::Config;
-use crate::messages::RequestMessage;
 use crate::connector::ConnectionManager;
+use crate::messages::RequestMessage;
 
 enum Command {
     SendMessage(String),
@@ -13,102 +16,76 @@ enum Command {
 }
 
 pub fn run(config: &Config) -> Result<(), Box<dyn Error>> {
-    let mut client = ConnectionManager::new(config.get_addr(), config.get_port());
-
-    println!("Connecting to {}:{}", config.get_addr(), config.get_port());
-    if let Err(e) = client.connect() {
-        return Err(format!("Failed to connect: {}", e).into());
-    }
-    println!("Connected");
+    let mut client = ConnectionManager::connect(config.addr(), config.port())?;
+    info!("Connected to {}:{}", config.addr(), config.port());
 
     let (to_ws_tx, to_ws_rx) = mpsc::channel();
     let (from_ws_tx, from_ws_rx) = mpsc::channel();
 
-    // Запускаем поток для работы с сообщениями Websocket
     let websocket_thread = thread::spawn(move || {
         loop {
-            match to_ws_rx.try_recv() {
+            match to_ws_rx.recv_timeout(Duration::from_millis(100)) {
                 Ok(Command::SendMessage(msg)) => {
-                    println!("Sending message: {}", msg);
                     if let Err(e) = client.send_message(&msg) {
-                        println!("Error sending message: {}", e);
-                        continue;
+                        error!("Error sending message: {}", e);
                     }
-                },
-                
-                Ok(Command::Terminate) => {
-                    println!("Terminating websocket thread");
-                    break;
                 }
-
-                Err(TryRecvError::Empty) => {},
-
-                Err(TryRecvError::Disconnected) => {
-                    println!("to_ws_rx channel has been disconnected");
-                    break;
-                }
+                Ok(Command::Terminate) => break,
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => break,
             }
 
             match client.receive_message() {
-                Ok(msg) => from_ws_tx.send(msg).unwrap(),
+                Ok(msg) => {
+                    if from_ws_tx.send(msg).is_err() {
+                        break;
+                    }
+                }
                 Err(e) => {
-                    eprintln!("Error receiving message: {}", e);
+                    error!("Error receiving message: {}", e);
                     break;
                 }
             }
         }
-
-        drop(from_ws_tx);
     });
 
-    // Отправляем сообщение о подписке
-    let mut params: Vec<String> = config.get_currencies_collection();
-    params.iter_mut().for_each(|s| s.push_str("@bookTicker"));
+    let params: Vec<String> = config
+        .currencies()
+        .iter()
+        .map(|s| format!("{}@bookTicker", s))
+        .collect();
 
     let subscribe_message = RequestMessage::new_subscribe(params);
     let subscribe_message_str = serde_json::to_string(&subscribe_message)?;
     to_ws_tx.send(Command::SendMessage(subscribe_message_str))?;
 
-    // обрабатываем входящие сообщения
     for msg in from_ws_rx {
         process_message(msg);
     }
 
-    println!("im here");
-    // Отправляем команду на завершение потока получения
-    to_ws_tx.send(Command::Terminate)?;
-    // Ожидаем завершения потока
-    websocket_thread.join().unwrap();
+    let _ = to_ws_tx.send(Command::Terminate);
+    let _ = websocket_thread.join();
 
     Ok(())
 }
 
-fn process_message(msg: OwnedMessage) {
+fn process_message(msg: Message) {
     match msg {
-        OwnedMessage::Text(msg) => {
-            println!("Received text message: {}", msg);
-            // обработать сообщение
-            // ...
-        },
-
-        OwnedMessage::Binary(data) => {
-            println!("Received binary data: {:?}", data);
-        },
-
-        OwnedMessage::Ping(ping) => {
-            println!("Received ping: {:?}", ping);
-            // отправить Pong в ответ
-            // ...
-        },
-
-        OwnedMessage::Pong(pong) => {
-            println!("Received pong: {:?}", pong);
-        },
-
-        OwnedMessage::Close(data) => {
-            println!("Received close message: {:?}", data);
-            // закрыть соединение
-            // ...
-        },
+        Message::Text(msg) => {
+            info!("Received text message: {}", msg);
+        }
+        Message::Binary(data) => {
+            info!("Received binary data: {:?}", data);
+        }
+        Message::Ping(ping) => {
+            info!("Received ping: {:?}", ping);
+        }
+        Message::Pong(pong) => {
+            info!("Received pong: {:?}", pong);
+        }
+        Message::Close(data) => {
+            info!("Received close message: {:?}", data);
+        }
+        Message::Frame(_) => {}
     }
 }

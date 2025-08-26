@@ -1,47 +1,54 @@
-  
-pub struct Config<'a> {
-    addr: &'a str,
+pub struct Config {
+    addr: String,
     port: u16,
-    currencies: &'a [String],
+    currencies: Vec<String>,
 }
-    
-impl<'a> Config<'a> {
-    pub fn build(args: &'a [String]) -> Result<Config<'a>, String> {
-        if args.len() < 3 {
-            return Err(String::from("not enough arguments"));
-        }
 
-        let addr_port = &args[1];
-
-        let addr_port = addr_port.trim_start_matches("wss://");
-        let (addr, port_str) = match addr_port.split_once(':') {
-            Some(pair) => (pair.0, pair.1),
-            None => return Err(String::from("ip-address and port not found")),
-        };
-
-        let port: u16 = port_str.parse().map_err(|err|{
-            format!("wrong port format: {}", err)
-        })?;
-
-        let currencies: &[String] = &args[2..];
-
-        Ok(Config {
-            addr,
+impl Config {
+    pub fn new(url: &str, currencies: &[String]) -> Result<Self, String> {
+        let addr_port = url.trim_start_matches("wss://");
+        let (addr, port_str) = addr_port
+            .split_once(':')
+            .ok_or_else(|| String::from("ip-address and port not found"))?;
+        let port = port_str
+            .parse::<u16>()
+            .map_err(|err| format!("wrong port format: {}", err))?;
+        Ok(Self {
+            addr: addr.to_string(),
             port,
-            currencies,
+            currencies: currencies.to_owned(),
         })
     }
 
-    pub fn get_addr(&self) -> &str {
+    pub fn addr(&self) -> &str {
         &self.addr
     }
 
-    pub fn get_port(&self) -> u16 {
+    pub fn port(&self) -> u16 {
         self.port
     }
 
-    pub fn get_currencies_collection(&self) -> Vec<String> {
-        self.currencies.to_vec()
+    pub fn currencies(&self) -> &[String] {
+        &self.currencies
     }
 }
-    
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn parses_valid_url() {
+        let currencies = vec!["btcusdt".into(), "ethusdt".into()];
+        let cfg = Config::new("wss://example.com:9443", &currencies).unwrap();
+        assert_eq!(cfg.addr(), "example.com");
+        assert_eq!(cfg.port(), 9443);
+        assert_eq!(cfg.currencies(), &currencies);
+    }
+
+    #[test]
+    fn rejects_invalid_url() {
+        let currencies = vec!["btcusdt".into()];
+        assert!(Config::new("wss://example.com", &currencies).is_err());
+    }
+}
